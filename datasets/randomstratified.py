@@ -1,8 +1,6 @@
 import random
-import shutil
 import os
 import json
-import csv
 
 kelas = [
     ("class 1", 862), ("class 2", 31), ("class 3", 14), ("class 4", 6), ("class 5", 10),
@@ -30,50 +28,70 @@ kelas = [
 folder_path = 'generateRandomStrat'
 dir_path = f'datasets/randomStratified/{folder_path}'
 
-# Remove all files in the directory
-# for filename in os.listdir(dir_path):
-#     file_path = os.path.join(dir_path, filename)
-#     if os.path.isfile(file_path) or os.path.islink(file_path):
-#         os.unlink(file_path)
-#     elif os.path.isdir(file_path):
-#         shutil.rmtree(file_path)
+os.makedirs(dir_path, exist_ok=True)
 
-for a in range(1, 11):
+step = 500
+min_total = 1000
+max_total = 10000
+
+total_kelas_asal = sum([jumlah for _, jumlah in kelas])
+
+for target_total in range(min_total, max_total + 1, step):
+    print(f"\nProcessing dataset dengan total {target_total} data...")
+    # 1. Hitung proporsi & jumlah float tiap kelas
+    jumlah_float = []
+    sisa_pecahan = []
+    for nama, jumlah in kelas:
+        prop = jumlah / total_kelas_asal if total_kelas_asal != 0 else 0
+        jml = prop * target_total
+        jumlah_float.append(jml)
+        sisa_pecahan.append(jml - int(jml))
+
+    # 2. Ambil integer (floor) dulu
+    jumlah_int = [int(jml) for jml in jumlah_float]
+    # 3. Hitung kekurangan (total_int harus pas)
+    kekurangan = target_total - sum(jumlah_int)
+
+    # 4. Tambahkan sisa ke kelas dengan sisa pecahan terbesar
+    urut_sisa = sorted(
+        list(enumerate(sisa_pecahan)), key=lambda x: x[1], reverse=True
+    )
+    for i in range(kekurangan):
+        idx = urut_sisa[i][0]
+        jumlah_int[idx] += 1
+
+    # 5. Generate data random per kelas
     start = 0
     end = 88000
-    # i = class x
-    # total data = range
-    for i, total_data in kelas:
-        total = int(a * total_data)
-        data = [random.randint(start, end) for _ in range(total)]
-        result = json.dumps({"data": data})
-
-        # Print the process to console
-        print(f"processing {i}")
-
-        # Create the folder for each dataset group
-        folder_path = f'{dir_path}/dataset{a*1000}'
-        os.makedirs(folder_path, exist_ok=True)
-
-        # Write the JSON files on each folder
-        with open(f'{dir_path}/dataset{a*1000}/{i.replace(" ", "_")}.json', "w") as f:
-            f.write(result)
+    folder_dataset = f'{dir_path}/dataset{target_total}'
+    os.makedirs(folder_dataset, exist_ok=True)
+    for idx, (nama, _) in enumerate(kelas):
+        total_data_kelas = jumlah_int[idx]
+        data = [random.randint(start, end) for _ in range(total_data_kelas)]
+        with open(f'{folder_dataset}/{nama.replace(" ", "_")}.json', "w") as f:
+            json.dump({"data": data}, f)
         start = end
         end += 88000
 
-    data = []
+    # 6. Gabungkan seluruh data jadi satu file txt
+    data_all = []
     for i in range(1, 101):
-        # Append the data from each JSON file
-        data_row = json.load(open(f"{dir_path}/dataset{a*1000}/class_{i}.json"))["data"]
-        # Extend the list instead of appending it
-        data.extend(data_row)
+        filejson = f"{folder_dataset}/class_{i}.json"
+        if os.path.exists(filejson):
+            with open(filejson) as jf:
+                data_row = json.load(jf)["data"]
+                data_all.extend(data_row)
 
-    # Write the data
-    with open(f'{dir_path}/dataset{a*1000}/RandStratified{a*1000}.txt', "w") as f:
-        for item in data:
+    txt_path = f'{folder_dataset}/RandStratified{target_total}.txt'
+    with open(txt_path, "w") as f:
+        for item in data_all:
             f.write(f"{item}\n")
 
-    # Remove the last newline character
-    with open(f'{dir_path}/dataset{a*1000}/RandStratified{a*1000}.txt', "rb+") as file:
+    # 7. Hapus newline terakhir agar rapi (opsional)
+    with open(txt_path, "rb+") as file:
         file.seek(-2, os.SEEK_END)
         file.truncate()
+
+    # Cek jumlah total data
+    print(f"  Sukses generate {len(data_all)} data (target: {target_total})")
+
